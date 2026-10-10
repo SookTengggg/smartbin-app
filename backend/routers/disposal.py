@@ -79,8 +79,8 @@ async def record_disposal(
         heatmap_url = ai_result["explainable_ai_logs"]["heatmap_image_url"]
 
         # Assign status based on decision
-        record_status = "VERIFIED" if action_decision == "auto_accept" else "PENDING_REVIEW"
-        recorded_primary = primary_cat if action_decision == "auto_accept" else "Unrecognized"
+        record_status = "VERIFIED" if action_decision == "AUTO_ACCEPT" else "PENDING_REVIEW"
+        recorded_primary = primary_cat if action_decision == "AUTO_ACCEPT" else "Unrecognized"
 
         # Prepare database entry
         log_entry = {
@@ -104,7 +104,7 @@ async def record_disposal(
         supabase.table("waste_logs").insert(log_entry).execute()
 
         # Route unconfident predictions to flagged reviews queue
-        if action_decision == "manual_review":
+        if action_decision == "MANUAL_REVIEW":
             supabase.table("flagged_reviews").insert({
                 "event_id": event_id,
                 "snapshot_url": snapshot_url,

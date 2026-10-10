@@ -9,8 +9,8 @@ def run_ai_inference(event_id: str, image_filename: str, total_scale_weight_gram
     # Decision threshold evaluation
     calibrated_confidence = 0.9247
     decision_threshold = 0.55
-    action_decision = "auto_accept" if calibrated_confidence >= decision_threshold else "manual_review"
-
+    action_decision = "AUTO_ACCEPT" if calibrated_confidence >= decision_threshold else "MANUAL_REVIEW"
+    
     # Dynamic weight distribution based on scale reading
     rice_weight = round(total_scale_weight_grams * 0.50, 2)
     chicken_weight = round(total_scale_weight_grams * 0.30, 2)
