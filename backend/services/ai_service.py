@@ -1,21 +1,23 @@
-import uuid
 from datetime import datetime, timezone
 
-def run_ai_inference(image_filename: str, total_scale_weight_grams: float):
+def run_ai_inference(event_id: str, image_filename: str, total_scale_weight_grams: float):
     """
-    Simulates the YOLOv11s-seg + TS-AURC + Grad-CAM inference pipeline
-    matching the locked 13-taxonomy AI contract.
+    Simulates the YOLOv11s-seg + TS-AURC + Grad-CAM inference pipeline.
     """
-    event_id = f"E{datetime.now(timezone.utc).strftime('%Y%m%d')}_{uuid.uuid4().hex[:6]}"
     total_segmented_pixels = 264000
 
-    # Dynamic weight distribution based on scale input
+    # Decision threshold evaluation
+    calibrated_confidence = 0.9247
+    decision_threshold = 0.55
+    action_decision = "auto_accept" if calibrated_confidence >= decision_threshold else "manual_review"
+
+    # Dynamic weight distribution based on scale reading
     rice_weight = round(total_scale_weight_grams * 0.50, 2)
     chicken_weight = round(total_scale_weight_grams * 0.30, 2)
     veg_weight = round(total_scale_weight_grams * 0.15, 2)
     soup_weight = round(total_scale_weight_grams * 0.05, 2)
 
-    # Benchmark cost loss (RM per 100g)
+    # Cost calculations based on benchmark rates
     rice_cost = round((rice_weight / 100.0) * 0.261, 2)
     chicken_cost = round((chicken_weight / 100.0) * 0.954, 2)
     veg_cost = round((veg_weight / 100.0) * 1.20, 2)
@@ -80,14 +82,11 @@ def run_ai_inference(image_filename: str, total_scale_weight_grams: float):
         },
         "calibration_security_gate": {
             "optimization_method": "TS-AURC",
-            "optimized_temperature_parameter": 0.48,
-            "calibrated_confidence_score": 0.9247,
+            "calibrated_confidence_score": calibrated_confidence,
             "operational_thresholds": {
-                "auto_accept": 0.85,    # <--- Aligned to 0.85
-                "user_review": 0.55,    # <--- Aligned to 0.55
-                "AI_team_review": 0.55  # <--- Aligned to 0.55
+                "decision_threshold": decision_threshold
             },
-            "action_routing_decision": "AUTO_ACCEPT"
+            "action_routing_decision": action_decision
         },
         "density_scaled_composition": {
             "total_segmented_food_pixels": total_segmented_pixels,
