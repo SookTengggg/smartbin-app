@@ -37,12 +37,6 @@ async def record_disposal(
             total_scale_weight_grams=weight_grams
         )
 
-        heatmap_url = upload_file_to_storage(
-            file_bytes=image_bytes,
-            original_filename=f"heatmap_{file.filename}",
-            bucket_name="xai-heatmaps"
-        )
-
         # Calculate carbon footprint
         weight_kg = round(weight_grams / 1000.0, 3)
         co2_kg = round(weight_kg * 0.7, 3)

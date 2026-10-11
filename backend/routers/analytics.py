@@ -4,21 +4,24 @@ from database.supabase_client import supabase
 
 router = APIRouter(prefix="/api/analytics", tags=["Analytics Dashboard"])
 
+# Define Malaysia Timezone (UTC +8)
+MY_TZ = timezone(timedelta(hours=8))
+
 @router.get("/dashboard")
 async def get_analytics_dashboard(
     range: str = Query("7days", description="today, 7days, 30days, custom"),
     station: str = Query("Main Kitchen", description="Kitchen station filter"),
-    start_date: str = Query(None, description="Format YYYY-MM-DD if range=custom"),
-    end_date: str = Query(None, description="Format YYYY-MM-DD if range=custom")
+    start_date: str = Query(None, alias="from", description="Supports start_date or 'from' parameter"),
+    end_date: str = Query(None, alias="to", description="Supports end_date or 'to' parameter")
 ):
     """
-    Endpoint B.2: Analytics Aggregations Dashboard
-    Queries Supabase, computes KPI deltas, pending reviews, and chart series.
+    Endpoint B.2: Analytics Aggregations Dashboard (Malaysia Timezone UTC+8)
     """
     try:
-        now = datetime.now(timezone.utc)
+        # Current time in Malaysia (UTC+8)
+        now = datetime.now(MY_TZ)
         
-        # Determine date filtering boundaries for current and prior periods
+        # Date Range Boundaries mapped to Malaysia Time
         if range == "today":
             start_dt = now.replace(hour=0, minute=0, second=0, microsecond=0)
             end_dt = now
@@ -34,9 +37,19 @@ async def get_analytics_dashboard(
             end_dt = now
             prior_start_dt = start_dt - timedelta(days=30)
             prior_end_dt = start_dt
-        elif range == "custom" and start_date and end_date:
-            start_dt = datetime.strptime(start_date, "%Y-%m-%d").replace(tzinfo=timezone.utc)
-            end_dt = datetime.strptime(end_date, "%Y-%m-%d").replace(hour=23, minute=59, second=59, tzinfo=timezone.utc)
+        elif range in ["custom", "Custom range"] and start_date and end_date:
+            # Handle MM/DD/YYYY or YYYY-MM-DD formats from frontend inputs
+            for fmt in ("%Y-%m-%d", "%m/%d/%Y"):
+                try:
+                    start_dt = datetime.strptime(start_date, fmt).replace(tzinfo=MY_TZ)
+                    end_dt = datetime.strptime(end_date, fmt).replace(hour=23, minute=59, second=59, tzinfo=MY_TZ)
+                    break
+                except ValueError:
+                    continue
+            else:
+                start_dt = now - timedelta(days=7)
+                end_dt = now
+
             duration = end_dt - start_dt
             prior_start_dt = start_dt - duration
             prior_end_dt = start_dt
@@ -46,44 +59,44 @@ async def get_analytics_dashboard(
             prior_start_dt = start_dt - timedelta(days=7)
             prior_end_dt = start_dt
 
-        # Fetch verified records for the active date range
+        # Fetch Verified Records for Current Period (converted to UTC for Supabase storage matching)
         response = supabase.table("waste_logs") \
             .select("*") \
             .eq("station", station) \
             .eq("status", "VERIFIED") \
-            .gte("created_at", start_dt.isoformat()) \
-            .lte("created_at", end_dt.isoformat()) \
+            .gte("created_at", start_dt.astimezone(timezone.utc).isoformat()) \
+            .lte("created_at", end_dt.astimezone(timezone.utc).isoformat()) \
             .execute()
         
         records = response.data if response.data else []
 
-        # Fetch pending review records count and weight
+        # Fetch Pending Review Count & Weight
         pending_response = supabase.table("waste_logs") \
             .select("total_weight_grams") \
             .eq("station", station) \
             .eq("status", "PENDING_REVIEW") \
-            .gte("created_at", start_dt.isoformat()) \
-            .lte("created_at", end_dt.isoformat()) \
+            .gte("created_at", start_dt.astimezone(timezone.utc).isoformat()) \
+            .lte("created_at", end_dt.astimezone(timezone.utc).isoformat()) \
             .execute()
         
         pending_records = pending_response.data if pending_response.data else []
         pending_count = len(pending_records)
         pending_weight_kg = round(sum(float(r.get("total_weight_grams", 0)) for r in pending_records) / 1000.0, 2)
 
-        # Fetch prior period records for comparative growth metrics
+        # Fetch Prior Period Records for Growth Metrics
         prior_response = supabase.table("waste_logs") \
             .select("total_weight_kg", "total_financial_loss_myr") \
             .eq("station", station) \
             .eq("status", "VERIFIED") \
-            .gte("created_at", prior_start_dt.isoformat()) \
-            .lte("created_at", prior_end_dt.isoformat()) \
+            .gte("created_at", prior_start_dt.astimezone(timezone.utc).isoformat()) \
+            .lte("created_at", prior_end_dt.astimezone(timezone.utc).isoformat()) \
             .execute()
         
         prior_records = prior_response.data if prior_response.data else []
         prior_weight_kg = sum(float(r.get("total_weight_kg", 0.0)) for r in prior_records)
         prior_cost_myr = sum(float(r.get("total_financial_loss_myr", 0.0)) for r in prior_records)
 
-        # Initialize aggregation containers
+        # Initialize Aggregators
         total_weight_kg = 0.0
         total_profit_leakage_myr = 0.0
         total_carbon_impact_co2 = 0.0
@@ -97,9 +110,8 @@ async def get_analytics_dashboard(
             "Prep trimmings": {"weight_kg": 0.0, "count": 0},
             "Others": {"weight_kg": 0.0, "count": 0}
         }
-        category_confidences = {}
 
-        # Process each verified database record
+        # Process Records
         for row in records:
             w_kg = float(row.get("total_weight_kg", 0.0))
             cost = float(row.get("total_financial_loss_myr", 0.0))
@@ -110,42 +122,36 @@ async def get_analytics_dashboard(
             total_profit_leakage_myr += cost
             total_carbon_impact_co2 += co2
 
-            # Aggregate daily trend totals
-            date_key = row.get("created_at", "").split("T")[0]
+            # Convert DB UTC timestamp to Malaysia Time for correct daily charting buckets
+            utc_dt = datetime.fromisoformat(row.get("created_at").replace("Z", "+00:00"))
+            my_dt = utc_dt.astimezone(MY_TZ)
+            date_key = my_dt.strftime("%Y-%m-%d")
+
             if date_key not in daily_trends_map:
                 daily_trends_map[date_key] = {"weight_kg": 0.0, "cost_myr": 0.0}
             daily_trends_map[date_key]["weight_kg"] += w_kg
             daily_trends_map[date_key]["cost_myr"] += cost
 
-            # Aggregate root-cause categories
             if reason not in root_causes:
                 root_causes[reason] = {"weight_kg": 0.0, "count": 0}
             root_causes[reason]["weight_kg"] += w_kg
             root_causes[reason]["count"] += 1
 
-            # Aggregate category breakdown shares and confidences
             breakdown = row.get("density_breakdown", {})
             for cat, details in breakdown.items():
                 cat_w = float(details.get("weight_g", 0.0)) / 1000.0
                 cat_cost = float(details.get("cost_myr", 0.0))
-                cat_conf = float(details.get("confidence", 0.0))
 
                 if cat not in taxonomy_shares:
                     taxonomy_shares[cat] = {"weight_kg": 0.0, "cost_myr": 0.0}
                 taxonomy_shares[cat]["weight_kg"] += cat_w
                 taxonomy_shares[cat]["cost_myr"] += cat_cost
 
-                if cat not in category_confidences:
-                    category_confidences[cat] = []
-                category_confidences[cat].append(cat_conf)
-
-        # Calculate period-over-period percentage changes
+        # Growth Percentages
         weight_growth_pct = round(((total_weight_kg - prior_weight_kg) / prior_weight_kg) * 100.0, 1) if prior_weight_kg > 0 else 0.0
         cost_growth_pct = round(((total_profit_leakage_myr - prior_cost_myr) / prior_cost_myr) * 100.0, 1) if prior_cost_myr > 0 else 0.0
 
-        # Finalize averages and format datasets for Recharts
-        avg_category_confidences = {cat: round(sum(vals)/len(vals), 4) for cat, vals in category_confidences.items()}
-        
+        # Format Formatting
         formatted_daily_trends = [
             {"date": d, "weight_kg": round(v["weight_kg"], 2), "cost_myr": round(v["cost_myr"], 2)}
             for d, v in sorted(daily_trends_map.items())
@@ -168,7 +174,6 @@ async def get_analytics_dashboard(
             for r, v in root_causes.items()
         ]
 
-        # Return structured JSON payload matching frontend and API contracts
         return {
             "kpi_cards": {
                 "total_weight_kg": round(total_weight_kg, 2),
@@ -176,7 +181,6 @@ async def get_analytics_dashboard(
                 "total_profit_leakage_myr": round(total_profit_leakage_myr, 2),
                 "cost_growth_percentage": cost_growth_pct,
                 "total_carbon_impact_co2_kg": round(total_carbon_impact_co2, 2),
-                "category_confidence_breakdown": avg_category_confidences,
                 "pending_review_notice": {
                     "count": pending_count,
                     "weight_kg": pending_weight_kg
