@@ -1,6 +1,6 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from routers import disposal, analytics, logs
+from routers import disposal, analytics, logs, admin
 
 app = FastAPI(
     title="SmartBin Backend API", 
@@ -21,6 +21,7 @@ app.add_middleware(
 app.include_router(disposal.router)
 app.include_router(analytics.router)
 app.include_router(logs.router)
+app.include_router(admin.router)
 
 # Health check root endpoint
 @app.get("/")
