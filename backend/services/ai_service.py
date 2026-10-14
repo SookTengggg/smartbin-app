@@ -7,7 +7,7 @@ def run_ai_inference(event_id: str, image_filename: str, total_scale_weight_gram
     total_segmented_pixels = 264000
 
     # Decision threshold evaluation
-    calibrated_confidence = 0.3500 #0.9247 
+    calibrated_confidence = 0.9247 #0.3500
     decision_threshold = 0.55
     action_decision = "AUTO_ACCEPT" if calibrated_confidence >= decision_threshold else "MANUAL_REVIEW"
     
