@@ -15,15 +15,16 @@ async def record_disposal(
 ):
     """
     Endpoint B.1: Record Waste Disposal (Waste Receiver Page)
+    Uploads photo -> Runs AI -> Applies Live Supabase Pricing -> Saves to Supabase.
     """
     try:
-        # Generate unique event ID
+        # Generate unique transaction ID
         event_id = f"E{datetime.now(timezone.utc).strftime('%Y%m%d')}_{uuid.uuid4().hex[:6]}"
 
         # Read uploaded image bytes
         image_bytes = await file.read()
 
-        # Upload photo to Supabase Storage
+        # Upload photo to Supabase Storage (raises 400 if fails)
         snapshot_url = upload_file_to_storage(
             file_bytes=image_bytes,
             original_filename=file.filename,
@@ -37,7 +38,14 @@ async def record_disposal(
             total_scale_weight_grams=weight_grams
         )
 
-        # Calculate carbon footprint
+        # Upload heatmap image to xai-heatmaps bucket
+        heatmap_url = upload_file_to_storage(
+            file_bytes=image_bytes,
+            original_filename=f"heatmap_{file.filename}",
+            bucket_name="xai-heatmaps"
+        )
+
+        # Calculate carbon footprint (locked 0.7 factor)
         weight_kg = round(weight_grams / 1000.0, 3)
         co2_kg = round(weight_kg * 0.7, 3)
 
@@ -46,14 +54,38 @@ async def record_disposal(
         action_decision = gate["action_routing_decision"]
         calibrated_conf = gate["calibrated_confidence_score"]
 
-        # Extract composition breakdown
+        # Dynamic Pricing Lookup from Supabase pricing_config
+        prices_res = supabase.table("pricing_config").select("category_key, price_per_100g_myr").execute()
+        live_price_map = {row["category_key"]: float(row["price_per_100g_myr"]) for row in prices_res.data} if prices_res.data else {}
+
+        # Recalculate financial loss using live prices
         comp = ai_result["density_scaled_composition"]
-        breakdown = comp["breakdown"]
+        raw_breakdown = comp["breakdown"]
+        
+        density_breakdown = {}
+        total_live_cost = 0.0
+
+        for cat, data in raw_breakdown.items():
+            w_g = float(data.get("calculated_weight_grams", 0.0))
+            if w_g > 0:
+                # Use live rate from DB, fallback to AI benchmark rate if missing
+                rate = live_price_map.get(cat, float(data.get("financial_cost_loss_myr", 0.0)) / (w_g / 100.0) if w_g > 0 else 1.0)
+                cat_cost = round((w_g / 100.0) * rate, 2)
+                total_live_cost += cat_cost
+
+                density_breakdown[cat] = {
+                    "area_pct": data.get("area_percentage", 0.0),
+                    "weight_g": w_g,
+                    "cost_myr": cat_cost,
+                    "confidence": data.get("confidence_score", 0.0)
+                }
+
+        total_live_cost = round(total_live_cost, 2)
 
         # Determine top 3 categories by area percentage
         top_3_guesses = [
             category for category, data in sorted(
-                breakdown.items(), 
+                raw_breakdown.items(), 
                 key=lambda item: item[1].get("area_percentage", 0), 
                 reverse=True
             )[:3]
@@ -61,24 +93,11 @@ async def record_disposal(
 
         # Determine primary category by weight
         primary_cat = max(
-            breakdown.items(), 
+            raw_breakdown.items(), 
             key=lambda item: item[1].get("calculated_weight_grams", 0)
         )[0]
 
-        # Format clean density breakdown for non-zero items
-        density_breakdown = {}
-        for cat, data in breakdown.items():
-            if data.get("calculated_weight_grams", 0) > 0:
-                density_breakdown[cat] = {
-                    "area_pct": data.get("area_percentage", 0.0),
-                    "weight_g": data.get("calculated_weight_grams", 0.0),
-                    "cost_myr": data.get("financial_cost_loss_myr", 0.0),
-                    "confidence": data.get("confidence_score", 0.0)
-                }
-
-        heatmap_url = ai_result["explainable_ai_logs"]["heatmap_image_url"]
-
-        # Assign status based on decision
+        # Set status based on decision
         record_status = "VERIFIED" if action_decision == "AUTO_ACCEPT" else "PENDING_REVIEW"
         recorded_primary = primary_cat if action_decision == "AUTO_ACCEPT" else "Unrecognized"
 
@@ -90,7 +109,7 @@ async def record_disposal(
             "total_weight_kg": weight_kg,
             "waste_reason": waste_reason,
             "primary_category": recorded_primary,
-            "total_financial_loss_myr": comp["total_financial_loss_myr"],
+            "total_financial_loss_myr": total_live_cost,
             "carbon_impact_co2_kg": co2_kg,
             "calibrated_confidence_score": calibrated_conf,
             "action_routing_decision": action_decision,
@@ -100,10 +119,10 @@ async def record_disposal(
             "status": record_status
         }
 
-        # Insert record into Supabase waste_logs table
+        # Save record to Supabase
         supabase.table("waste_logs").insert(log_entry).execute()
 
-        # Route unconfident predictions to flagged reviews queue
+        # Route unconfident records to flagged reviews queue
         if action_decision == "MANUAL_REVIEW":
             supabase.table("flagged_reviews").insert({
                 "event_id": event_id,
@@ -113,7 +132,6 @@ async def record_disposal(
                 "review_status": "PENDING"
             }).execute()
 
-        # Return standardized response payload
         return {
             "status": "SUCCESS",
             "event_id": event_id,
@@ -124,7 +142,7 @@ async def record_disposal(
                 "total_weight_grams": weight_grams,
                 "total_weight_kg": weight_kg,
                 "waste_reason": waste_reason,
-                "total_financial_loss_myr": comp["total_financial_loss_myr"],
+                "total_financial_loss_myr": total_live_cost,
                 "carbon_impact_co2_kg": co2_kg,
                 "primary_category": recorded_primary
             },
@@ -133,6 +151,8 @@ async def record_disposal(
             "heatmap_url": heatmap_url
         }
 
+    except HTTPException as he:
+        raise he
     except Exception as e:
         print(f"Error in record_disposal: {e}")
         raise HTTPException(status_code=500, detail=str(e))
