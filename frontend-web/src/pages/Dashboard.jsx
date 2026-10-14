@@ -2,11 +2,12 @@ import { useState } from 'react'
 import { api } from '../api'
 import { useApi } from '../lib/useApi'
 import FilterBar from '../components/FilterBar'
-import { CategoryDonut, ReasonBars, TrendBars } from '../components/charts'
+import { CategoryDonut, ReasonList, TrendBars } from '../components/charts'
 import { trendSeries } from '../lib/chartData'
 import { Empty, ErrorBox, PendingNote, Spinner } from '../components/ui'
 import { REASONS, daysInRange, kg, previousLabel } from '../lib/format'
 import ReportModal from '../reports/ReportModal'
+import { ESG_CONFIG } from '../lib/esgConfig'
 
 function Kpi({ label, value, unit, prefix, change, prevLabel, note }) {
   // Less waste than before is good (green); more is bad (red).
@@ -38,15 +39,24 @@ function Kpi({ label, value, unit, prefix, change, prevLabel, note }) {
 export default function Dashboard({ filter, setFilter, names }) {
   const { data, error, loading, reload: load } = useApi(() => api.dashboard(filter), JSON.stringify(filter))
   const [reason, setReason] = useState('')
+  const [esgPeriod, setEsgPeriod] = useState('fy') // ESG report: financial year to date, or the date range above
+  const [showBursa, setShowBursa] = useState(ESG_CONFIG.showBursa) // Bursa Malaysia codes, for listed companies
   const [report, setReport] = useState(null) // 'esg' | 'cost'
 
   const k = data?.kpi_cards
   const charts = data?.charts
   const days = daysInRange(filter)
-  const series = trendSeries(days, charts?.daily_trends)
-  const reasons = REASONS.map((r) => charts?.root_cause_analysis?.find((x) => x.reason === r) || { reason: r, count: 0, weight_kg: 0 })
+  const hourly = filter.range === 'today'
+  const series = trendSeries(days, charts?.daily_trends, { hourly })
+  // The reason list has no cost of its own, so it is the sum of its foods' cost.
+  const reasons = REASONS.map((r) => {
+    const hit = charts?.root_cause_analysis?.find((x) => x.reason === r) || { reason: r, count: 0, weight_kg: 0, foods: [] }
+    return { ...hit, cost_myr: (hit.foods || []).reduce((s, f) => s + (Number(f.cost_myr) || 0), 0) }
+  })
   const pending = k?.pending_review_notice
-  const hasData = k && k.total_weight_kg > 0
+  // The backend renamed total_weight_kg to total_waste_weight_kg; accept both.
+  const totalKg = k ? Number(k.total_waste_weight_kg ?? k.total_weight_kg ?? 0) : 0
+  const hasData = totalKg > 0
 
   return (
     <>
@@ -68,7 +78,7 @@ export default function Dashboard({ filter, setFilter, names }) {
           )}
 
           <div className="grid grid-cols-3 gap-[18px] max-lg:grid-cols-1">
-            <Kpi label="Total weight" value={kg(k.total_weight_kg, 1)} unit="kg" change={k.weight_growth_percentage} prevLabel={previousLabel(filter)} />
+            <Kpi label="Total weight" value={kg(totalKg, 1)} unit="kg" change={k.weight_growth_percentage} prevLabel={previousLabel(filter)} />
             <Kpi label="Total money lost" prefix="RM" value={Number(k.total_profit_leakage_myr).toFixed(2)} change={k.cost_growth_percentage} prevLabel={previousLabel(filter)} />
             <Kpi label="Carbon footprint" value={kg(k.total_carbon_impact_co2_kg, 1)} unit="kg CO2e" note="Estimated at 0.70 kg CO2e per kg of food waste sent to landfill" />
           </div>
@@ -76,12 +86,12 @@ export default function Dashboard({ filter, setFilter, names }) {
           <section className="panel">
             <div className="mb-4 flex flex-wrap items-baseline justify-between gap-2">
               <h2 className="text-[16px]">Waste trend</h2>
-              <span className="hint">Point at a bar to see its weight and cost</span>
+              <span className="hint">{hourly ? 'Each bar is one hour today. ' : ''}Point at a bar to see its weight, cost and foods</span>
             </div>
             {hasData ? (
               <div className="grid grid-cols-2 gap-6 max-lg:grid-cols-1">
-                <TrendBars data={series} dataKey="weight_kg" title="Weight thrown away" yLabel="Weight (kg)" from="#F7C948" to="#D99400" id="gW" />
-                <TrendBars data={series} dataKey="cost_myr" title="Money lost" yLabel="Cost (RM)" from="#EE6A55" to="#B3261E" id="gC" />
+                <TrendBars data={series} dataKey="weight_kg" title="Weight thrown away" yLabel="Weight (kg)" from="#F7C948" to="#D99400" id="gW" names={names} />
+                <TrendBars data={series} dataKey="cost_myr" title="Money lost" yLabel="Cost (RM)" from="#EE6A55" to="#B3261E" id="gC" names={names} />
               </div>
             ) : (
               <Empty title="No verified waste in this period">Choose a longer date range, or log a disposal on the Waste receiver page.</Empty>
@@ -95,8 +105,8 @@ export default function Dashboard({ filter, setFilter, names }) {
             </section>
             <section className="panel">
               <h2 className="mb-1 text-[16px]">Why food was thrown away</h2>
-              <p className="hint mb-4">Number of disposals for each reason</p>
-              {hasData ? <ReasonBars rows={reasons} /> : <Empty title="No data yet" />}
+              <p className="hint mb-3">Number of disposals for each reason. Select a reason to see which foods were thrown away.</p>
+              {hasData ? <ReasonList rows={reasons} names={names} /> : <Empty title="No data yet" />}
             </section>
           </div>
 
@@ -112,12 +122,27 @@ export default function Dashboard({ filter, setFilter, names }) {
                   ))}
                 </select>
               </label>
-              <p className="hint pb-2">Both reports use this waste reason and the date range chosen at the top of this page.</p>
+              <label className="label">
+                ESG report period
+                <select className="field w-64" value={esgPeriod} onChange={(e) => setEsgPeriod(e.target.value)}>
+                  <option value="fy">Financial year to date</option>
+                  <option value="range">Date range at the top of this page</option>
+                </select>
+              </label>
+              <label className="flex h-[38px] cursor-pointer items-center gap-2 rounded-lg border border-ctl bg-white px-3 text-[14px] hover:border-accent">
+                <input type="checkbox" className="h-4 w-4 accent-[#047857]" checked={showBursa} onChange={(e) => setShowBursa(e.target.checked)} />
+                Include Bursa Malaysia codes
+                <span className="hint">(listed companies)</span>
+              </label>
+              <p className="hint max-w-md pb-2">
+                Both reports use this waste reason. The cost report uses the date range at the top. The ESG report uses the financial year unless you
+                choose the date range.
+              </p>
             </div>
             <div className="grid grid-cols-2 gap-4 max-lg:grid-cols-1">
               <ReportCard
                 title="ESG report"
-                text="Carbon footprint of the food thrown away in the chosen period."
+                text="Scope 3 Category 5 emissions, food waste metrics with the previous period, methodology and disclosure index."
                 onOpen={() => setReport('esg')}
                 button="Preview ESG report"
               />
@@ -132,7 +157,7 @@ export default function Dashboard({ filter, setFilter, names }) {
         </div>
       )}
 
-      <ReportModal kind={report} onClose={() => setReport(null)} filter={filter} reason={reason} names={names} />
+      <ReportModal kind={report} onClose={() => setReport(null)} filter={filter} reason={reason} names={names} esgPeriod={esgPeriod} showBursa={showBursa} />
     </>
   )
 }

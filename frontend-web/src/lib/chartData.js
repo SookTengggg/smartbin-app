@@ -1,14 +1,32 @@
-import { OTHER_COLOR, categoryColor, categoryName, shortDate } from './format'
+import { OTHER_COLOR, categoryColor, categoryName, hoursForToday, keyOf, longDate, shortDate } from './format'
 
-// Fill in days with no waste so the x-axis shows every day in the range.
-export function trendSeries(days, dailyTrends) {
-  const byDate = Object.fromEntries((dailyTrends || []).map((d) => [d.date, d]))
-  return days.map((key) => ({
-    date: key,
-    label: shortDate(key),
-    weight_kg: byDate[key]?.weight_kg || 0,
-    cost_myr: byDate[key]?.cost_myr || 0,
-  }))
+// A backend "foods" list ([{ category, weight_kg, cost_myr }]) with keys, names and colours added.
+export function foodsOf(list, names) {
+  return (list || [])
+    .filter((f) => Number(f.weight_kg) > 0 || Number(f.cost_myr) > 0)
+    .map((f) => {
+      const key = keyOf(f.category)
+      return { key, name: categoryName(key, names), color: categoryColor(key), weight_kg: Number(f.weight_kg) || 0, cost_myr: Number(f.cost_myr) || 0 }
+    })
+}
+
+// Fill in days (or, for "today", hours) with no waste so the x-axis shows every slot in the range.
+// The backend sends "date" as "YYYY-MM-DD", or as "HH:00" when the range is today.
+export function trendSeries(days, dailyTrends, { hourly = false } = {}) {
+  const byKey = Object.fromEntries((dailyTrends || []).map((d) => [d.date, d]))
+  const keys = hourly ? hoursForToday(Object.keys(byKey)) : days
+  return keys.map((key) => {
+    const hit = byKey[key]
+    return {
+      date: key,
+      label: hourly ? key : shortDate(key),
+      title: hourly ? `${key} to ${String(parseInt(key, 10) + 1).padStart(2, '0')}:00` : longDate(key),
+      weight_kg: hit?.weight_kg || 0,
+      cost_myr: hit?.cost_myr || 0,
+      count: hit?.disposals_count || 0,
+      foods: hit?.foods || [],
+    }
+  })
 }
 
 // Top 5 categories by weight, the rest folded into "Other".

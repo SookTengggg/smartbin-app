@@ -100,6 +100,9 @@ export const api = {
   // B.4 Log detail pop-up
   logDetail: (eventId) => request(`/api/waste/logs/${encodeURIComponent(eventId)}`),
 
+  // Report data for the ESG and cost analysis reports, in one call (routers/reports.py)
+  report: (filter, reason) => request('/api/reports', { params: { ...rangeParams(filter), reason } }),
+
   // B.5 Admin pricing
   pricing: () => request('/api/config/pricing'),
   savePrices: (prices) => request('/api/config/pricing/batch', { method: 'PUT', body: { prices } }),

@@ -57,6 +57,12 @@ export function categoryName(key, names) {
   return (names && names[key]) || titleCase(key)
 }
 
+// The backend's food breakdown lists send "category" as a title-cased name ("Rice Rice Dishes")
+// instead of the key ("rice_rice_dishes"). This turns either form back into the key.
+export function keyOf(category) {
+  return String(category || '').trim().toLowerCase().replace(/\s+/g, '_')
+}
+
 // The log list sends categories as a title-cased string, e.g. "Rice Rice Dishes, Chicken".
 export function keysFromSummary(summary) {
   if (!summary || summary === 'Not labelled yet') return []
@@ -71,6 +77,7 @@ export const pct = (v, d = 1) => (Number(v) || 0).toFixed(d) + '%'
 // Dates, always shown in Malaysia time
 const TZ = 'Asia/Kuala_Lumpur'
 const keyFmt = new Intl.DateTimeFormat('en-CA', { timeZone: TZ, year: 'numeric', month: '2-digit', day: '2-digit' })
+export const MON_LONG = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December']
 const MON = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
 
 export function dateKey(d) {
@@ -94,7 +101,7 @@ export function nowStamp() {
   return dateTimeOf(new Date().toISOString())
 }
 
-function addDays(key, n) {
+export function addDays(key, n) {
   const d = new Date(key + 'T00:00:00Z')
   d.setUTCDate(d.getUTCDate() + n)
   return d.toISOString().slice(0, 10)
@@ -113,6 +120,17 @@ export function daysInRange(filter) {
   }
   const out = []
   for (let k = start; k <= end && out.length < 400; k = addDays(k, 1)) out.push(k)
+  return out
+}
+
+// "Today" is grouped by hour by the backend ("09:00"). Show the working day (08:00 to 21:00),
+// widened to include any hour that has waste.
+export function hoursForToday(trendKeys = []) {
+  const used = trendKeys.map((k) => parseInt(k, 10)).filter((h) => h >= 0 && h <= 23)
+  const lo = Math.min(8, ...used)
+  const hi = Math.max(21, ...used)
+  const out = []
+  for (let h = lo; h <= hi; h++) out.push(String(h).padStart(2, '0') + ':00')
   return out
 }
 

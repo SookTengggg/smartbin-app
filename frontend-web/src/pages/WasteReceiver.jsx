@@ -1,9 +1,9 @@
 import { useEffect, useRef, useState } from 'react'
-import { CircleCheck, Upload } from 'lucide-react'
+import { CircleCheck, ImageOff, RotateCcw, Upload } from 'lucide-react'
 import { api } from '../api'
 import { REASONS, categoryName } from '../lib/format'
 import Evidence from '../components/Evidence'
-import { Empty, ErrorBox, PendingNote } from '../components/ui'
+import { Empty, ErrorBox, Modal, PendingNote } from '../components/ui'
 
 const MAX_GRAMS = 50000
 
@@ -17,6 +17,7 @@ export default function WasteReceiver({ names }) {
   const [apiError, setApiError] = useState(null)
   const [result, setResult] = useState(null) // last response from the backend
   const [message, setMessage] = useState(null) // { kind: 'saved' | 'pending', text }
+  const [uploadFailed, setUploadFailed] = useState(null) // error text when the photo did not upload
   const fileInput = useRef(null)
 
   useEffect(() => () => preview && URL.revokeObjectURL(preview), [preview])
@@ -54,19 +55,34 @@ export default function WasteReceiver({ names }) {
     if (!reason) errs.reason = 'Choose a reason.'
     setErrors(errs)
     if (Object.keys(errs).length) return
+    send()
+  }
 
+  // The backend answers 400 "Image upload failed ... Please re-upload the photo." when the photo
+  // could not be stored. Nothing is saved then, so the same photo can be sent again.
+  function isUploadFailure(err) {
+    return err?.status === 400 && /upload/i.test(err.message || '')
+  }
+
+  async function send() {
+    const g = Number(grams)
     setBusy(true)
     setApiError(null)
     setMessage(null)
     try {
       const res = await api.recordDisposal({ file, weightGrams: g, reason })
       // Two outcomes only: auto accept, or (confidence below the threshold) sent for manual review.
+      setUploadFailed(null)
       setResult(res)
       // The result panel shows its own "pending manual review" note, so only a saved result needs a message.
       setMessage(res.action_routing_decision === 'AUTO_ACCEPT' ? { kind: 'saved', text: `Saved. ${foodList(res, names)} recorded.` } : null)
       resetForm()
     } catch (err) {
-      setApiError(err)
+      if (isUploadFailure(err)) setUploadFailed(err.message)
+      else {
+        setUploadFailed(null)
+        setApiError(err)
+      }
     } finally {
       setBusy(false)
     }
@@ -173,6 +189,47 @@ export default function WasteReceiver({ names }) {
         )}
       </div>
 
+      <Modal open={!!uploadFailed} onClose={() => setUploadFailed(null)} title="The photo did not upload">
+        <div className="flex max-w-[560px] flex-col gap-4">
+          <div className="flex items-start gap-3">
+            {preview ? (
+              <img src={preview} alt="Photo that did not upload" className="h-20 w-24 shrink-0 rounded-lg object-cover" />
+            ) : (
+              <ImageOff className="shrink-0 text-muted" size={28} />
+            )}
+            <div className="flex flex-col gap-1">
+              <p className="text-[14px]">Nothing was saved. The weight ({grams} g) and reason ({reason}) are still filled in.</p>
+              <p className="hint">This is usually a short connection problem. Try the same photo again, or choose a different one.</p>
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-3 max-sm:grid-cols-1">
+            <button
+              type="button"
+              className="btn btn-primary inline-flex items-center justify-center gap-2"
+              disabled={busy}
+              onClick={() => send()}
+            >
+              <RotateCcw size={16} /> {busy ? 'Uploading…' : 'Upload again'}
+            </button>
+            <button
+              type="button"
+              className="btn inline-flex items-center justify-center gap-2"
+              disabled={busy}
+              onClick={() => {
+                setUploadFailed(null)
+                clearPhoto()
+                fileInput.current?.click()
+              }}
+            >
+              <Upload size={16} /> Choose another photo
+            </button>
+          </div>
+          <details className="hint">
+            <summary className="cursor-pointer">Error details</summary>
+            <p className="mt-1 break-words">{uploadFailed}</p>
+          </details>
+        </div>
+      </Modal>
     </div>
   )
 }
