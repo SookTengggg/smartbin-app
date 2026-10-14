@@ -1,16 +1,50 @@
-# React + Vite
+# SmartBin web dashboard (frontend-web)
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+React (Vite) + Tailwind CSS + Recharts. It calls the FastAPI backend for all data.
 
-Currently, two official plugins are available:
+## Run it
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+```
+cd frontend-web
+npm install
+npm run dev
+```
 
-## React Compiler
+Open http://localhost:5173.
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+By default the app calls the live backend on Render. To use a backend on your own computer,
+copy `.env.example` to `.env.local` and set:
 
-## Expanding the ESLint configuration
+```
+VITE_API_BASE_URL=http://localhost:8000
+```
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+The free Render server sleeps after 15 minutes idle. The first request after that can take up to a
+minute; the app shows a "server is waking up" notice while it waits.
+
+Other commands: `npm run lint` (checks the code), `npm run build` (production build into `dist/`).
+
+## Where things are
+
+| File | What it does |
+|---|---|
+| `src/api.js` | Every call to the backend. Change endpoints here only. |
+| `src/App.jsx` | Layout, page switching (`#receiver`, `#dashboard`, `#log`, `#admin`), shared filter |
+| `src/pages/WasteReceiver.jsx` | Upload form, analysis result, low-confidence pop-up |
+| `src/pages/Dashboard.jsx` | KPI cards, pending notice, charts, report buttons |
+| `src/pages/LiveLog.jsx` | Log table with sorting, filters, pages and the detail pop-up |
+| `src/pages/Admin.jsx` | Food price table and "Add a food category" |
+| `src/reports/` | ESG and cost analysis reports (A4 preview, printed with `@media print`) |
+| `src/components/` | Shared pieces: sidebar, filter bar, charts, pop-up, photo + breakdown panel |
+| `src/lib/format.js` | Reasons, carbon factor, category colours, number and date formatting (Malaysia time) |
+
+## API endpoints used
+
+| Page | Endpoint |
+|---|---|
+| Waste receiver | `POST /api/waste/disposal` |
+| Analytics dashboard | `GET /api/analytics/dashboard?range=&station=&from=&to=` |
+| Live log | `GET /api/waste/logs?range=&station=&page=&limit=&sort_by=&sort_order=&category=&status=` |
+| Detail pop-up | `GET /api/waste/logs/{event_id}` |
+| Admin | `GET /api/config/pricing`, `PUT /api/config/pricing/batch`, `POST /api/config/pricing/category` |
+| Reports | The logs and detail endpoints above (there is no report endpoint yet) |
