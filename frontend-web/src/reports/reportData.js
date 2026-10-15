@@ -1,6 +1,6 @@
 import { ApiError, api, fetchAllLogs, mapLimit } from '../api'
 import { trendSeries } from '../lib/chartData'
-import { CO2_PER_KG, REASONS, addDays, dateKey, daysInRange, hoursForToday, keyOf, longDate, nowStamp, rangeLabel, timeOf } from '../lib/format'
+import { CO2_PER_KG, REASONS, addDays, canonicalReason, mergeReasons, dateKey, daysInRange, hoursForToday, keyOf, longDate, nowStamp, rangeLabel, timeOf } from '../lib/format'
 import { ESG_CONFIG } from '../lib/esgConfig'
 
 // ESG report: the chosen period plus the period before it, for the comparative column.
@@ -111,10 +111,7 @@ function fromReportEndpoint(res, filter, reason) {
     })),
     shares: foodRows.map((f) => ({ category: f.key, weight_kg: f.weight_g / 1000, cost_myr: f.cost })),
     foodRows,
-    reasonRows: REASONS.map((name) => {
-      const r = reasonList.find((x) => x.reason === name) || {}
-      return { reason: name, count: num(r.count), weight_kg: num(r.weight_kg), cost: num(r.cost_myr) }
-    }),
+    reasonRows: mergeReasons(reasonList).map((r) => ({ reason: r.reason, count: r.count, weight_kg: r.weight_kg, cost: r.cost_myr })),
     dayRows: (res.by_day || [])
       .filter((d) => num(d.count) > 0)
       .map((d) => ({ date: d.date, foods: foods(d.foods), weight_kg: num(d.weight_kg), cost: num(d.cost_myr) })),
@@ -157,7 +154,7 @@ async function hoursFromDashboard(data, filter, onProgress) {
 
 async function hoursFromLogs(data, kind, filter, reason, onProgress) {
   onProgress?.('Reading today’s disposals…')
-  const verified = (await fetchAllLogs(filter)).filter((r) => r.status === 'VERIFIED' && (!reason || r.waste_reason === reason))
+  const verified = (await fetchAllLogs(filter)).filter((r) => r.status === 'VERIFIED' && (!reason || canonicalReason(r.waste_reason) === reason))
   const byHour = {}
   verified.forEach((r) => {
     const h = (byHour[hourOf(r.timestamp_utc)] ||= { weight_g: 0, cost: 0, records: [] })
@@ -208,7 +205,7 @@ async function hoursFromLogs(data, kind, filter, reason, onProgress) {
 // Old way, kept as a fallback: reads the logs and each record's detail.
 async function loadReportFromLogs(kind, filter, reason, onProgress) {
   onProgress?.('Reading disposals…')
-  const all = (await fetchAllLogs(filter)).filter((r) => !reason || r.waste_reason === reason)
+  const all = (await fetchAllLogs(filter)).filter((r) => !reason || canonicalReason(r.waste_reason) === reason)
   const verified = all.filter((r) => r.status === 'VERIFIED')
   const pending = all.filter((r) => r.status === 'PENDING_REVIEW')
 
@@ -273,7 +270,7 @@ async function loadReportFromLogs(kind, filter, reason, onProgress) {
     .sort((a, b) => b.cost - a.cost)
 
   const reasonRows = REASONS.map((name) => {
-    const rs = verified.filter((r) => r.waste_reason === name)
+    const rs = verified.filter((r) => canonicalReason(r.waste_reason) === name)
     return {
       reason: name,
       count: rs.length,

@@ -5,6 +5,52 @@ export const STATIONS = ['Main Kitchen']
 // Must match the reason strings the backend groups by (routers/analytics.py).
 export const REASONS = ['Plate waste', 'Over-preparation', 'Expiration or spoilage', 'Prep trimmings', 'Others']
 
+// Records saved outside this app (for example from the API docs page) may spell a reason differently:
+// "Plate Waste", "Expiration/Spoilage", "Prep Trimmings". This maps any spelling to one of the five
+// reasons above, so every disposal is counted under a reason. Anything unknown counts as "Others".
+const REASON_ALIASES = {
+  platewaste: 'Plate waste',
+  plate: 'Plate waste',
+  overpreparation: 'Over-preparation',
+  overprepared: 'Over-preparation',
+  overprep: 'Over-preparation',
+  expirationorspoilage: 'Expiration or spoilage',
+  expirationspoilage: 'Expiration or spoilage',
+  expiration: 'Expiration or spoilage',
+  expired: 'Expiration or spoilage',
+  spoilage: 'Expiration or spoilage',
+  spoiled: 'Expiration or spoilage',
+  preptrimmings: 'Prep trimmings',
+  preptrimming: 'Prep trimmings',
+  trimmings: 'Prep trimmings',
+  others: 'Others',
+  other: 'Others',
+}
+export function canonicalReason(name) {
+  const k = String(name || '').toLowerCase().replace(/[^a-z]/g, '')
+  return REASON_ALIASES[k] || 'Others'
+}
+
+// Adds up a backend reason list ([{ reason, count, weight_kg, cost_myr?, foods? }]) under the five reasons,
+// so differently spelt reasons are not lost. Foods are merged by category.
+export function mergeReasons(list) {
+  const out = Object.fromEntries(REASONS.map((r) => [r, { reason: r, count: 0, weight_kg: 0, cost_myr: 0, foods: {}, spellings: [] }]))
+  ;(list || []).forEach((x) => {
+    const m = out[canonicalReason(x.reason)]
+    m.count += Number(x.count) || 0
+    m.weight_kg += Number(x.weight_kg) || 0
+    m.cost_myr += Number(x.cost_myr) || 0
+    if (x.reason !== m.reason && (Number(x.count) || 0) > 0) m.spellings.push(x.reason)
+    ;(x.foods || []).forEach((f) => {
+      const key = String(f.category || '').trim().toLowerCase().replace(/\s+/g, '_')
+      const g = (m.foods[key] ||= { category: f.category, weight_kg: 0, cost_myr: 0 })
+      g.weight_kg += Number(f.weight_kg) || 0
+      g.cost_myr += Number(f.cost_myr) || 0
+    })
+  })
+  return REASONS.map((r) => ({ ...out[r], foods: Object.values(out[r].foods).sort((a, b) => b.weight_kg - a.weight_kg) }))
+}
+
 // Carbon factor used by the backend (routers/disposal.py): UK DESNZ 2026, food waste to landfill.
 export const CO2_PER_KG = 0.7
 

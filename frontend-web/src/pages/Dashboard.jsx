@@ -5,7 +5,7 @@ import FilterBar from '../components/FilterBar'
 import { CategoryDonut, ReasonList, TrendBars } from '../components/charts'
 import { trendSeries } from '../lib/chartData'
 import { Empty, ErrorBox, PendingNote, Spinner } from '../components/ui'
-import { REASONS, daysInRange, kg, previousLabel } from '../lib/format'
+import { REASONS, daysInRange, kg, mergeReasons, previousLabel } from '../lib/format'
 import ReportModal from '../reports/ReportModal'
 import { ESG_CONFIG } from '../lib/esgConfig'
 
@@ -49,10 +49,11 @@ export default function Dashboard({ filter, setFilter, names }) {
   const hourly = filter.range === 'today'
   const series = trendSeries(days, charts?.daily_trends, { hourly })
   // The reason list has no cost of its own, so it is the sum of its foods' cost.
-  const reasons = REASONS.map((r) => {
-    const hit = charts?.root_cause_analysis?.find((x) => x.reason === r) || { reason: r, count: 0, weight_kg: 0, foods: [] }
-    return { ...hit, cost_myr: (hit.foods || []).reduce((s, f) => s + (Number(f.cost_myr) || 0), 0) }
-  })
+  // Differently spelt reasons ("Plate Waste") are added to the matching one, so the counts add up to all disposals.
+  const reasons = mergeReasons(charts?.root_cause_analysis).map((r) => ({
+    ...r,
+    cost_myr: r.foods.reduce((s, f) => s + (Number(f.cost_myr) || 0), 0),
+  }))
   const pending = k?.pending_review_notice
   // The backend renamed total_weight_kg to total_waste_weight_kg; accept both.
   const totalKg = k ? Number(k.total_waste_weight_kg ?? k.total_weight_kg ?? 0) : 0
