@@ -5,6 +5,10 @@
 // every number in the report must come from the backend.
 // When the backend gets a settings API, replace this file with a call to it.
 
+// The ESG report is hidden for now: SmartBin can only supply a small part of an ESG disclosure.
+// The cost analysis report carries a short ESG note instead. Set to true to show the ESG report again.
+export const SHOW_ESG_REPORT = false
+
 export const ESG_CONFIG = {
   company: 'Restoran Contoh Sdn Bhd',
 

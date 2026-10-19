@@ -1,5 +1,5 @@
 import { CategoryDonut, ReasonBars, TrendBars } from '../components/charts'
-import { categoryName, kg, rm } from '../lib/format'
+import { CO2_PER_KG, categoryName, kg, rm } from '../lib/format'
 import { isHour, slotLong, slotShort, slotWord } from './slots'
 
 export function Header({ title, subtitle }) {
@@ -187,6 +187,39 @@ export function CostReport({ data, names, idPrefix = 'r' }) {
                 </tr>
               </tbody>
             </table>
+          </section>
+
+          <section>
+            <h3>5. Data for ESG reporting</h3>
+            <table className="rpt">
+              <thead>
+                <tr>
+                  <th>Figure</th>
+                  <th className="n">Value</th>
+                  <th>How it is obtained</th>
+                  <th>Data type</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>Food waste generated</td>
+                  <td className="n">{kg(data.totalKg)} kg</td>
+                  <td>Weighed by the scale in the bin at each disposal</td>
+                  <td>Measured</td>
+                </tr>
+                <tr>
+                  <td>Estimated emissions from this food waste</td>
+                  <td className="n">{kg(data.co2)} kg CO2e</td>
+                  <td>Weight × {CO2_PER_KG} kg CO2e per kg (UK DESNZ 2026, food waste sent to landfill)</td>
+                  <td>Estimated</td>
+                </tr>
+              </tbody>
+            </table>
+            <p className="mt-1 text-[9.5px] text-[#5A6770]">
+              The food waste weight is direct, measured data. A company can use it as activity data in its own ESG or sustainability report, under Scope 3
+              Category 5 (waste generated in operations). The emission figure assumes all food waste goes to landfill. SmartBin measures food waste only,
+              so this is not an ESG report.
+            </p>
           </section>
         </>
       )}
