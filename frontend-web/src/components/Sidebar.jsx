@@ -2,7 +2,7 @@ import { PAGES } from '../lib/nav'
 
 export default function Sidebar({ page, onNavigate }) {
   return (
-    <aside className="flex flex-col gap-6 border-r border-[#16212A] bg-side px-3.5 py-6 text-[#DCE7EC] max-md:flex-row max-md:items-center max-md:gap-3 max-md:overflow-x-auto max-md:px-3 max-md:py-3">
+    <aside className="sticky top-0 z-30 flex h-screen flex-col gap-6 self-start overflow-y-auto border-r border-[#16212A] bg-side px-3.5 py-6 text-[#DCE7EC] max-md:h-auto max-md:flex-row max-md:items-center max-md:gap-3 max-md:overflow-x-auto max-md:overflow-y-visible max-md:border-r-0 max-md:border-b max-md:px-3 max-md:py-3">
       <div className="px-2.5 max-md:flex max-md:shrink-0 max-md:items-center max-md:gap-2 max-md:px-1">
         <img src="/logo.png" alt="" className="mb-3 h-[60px] w-[60px] drop-shadow-[0_0_14px_rgba(52,211,153,0.35)] max-md:mb-0 max-md:h-9 max-md:w-9" />
         <div className="font-head text-[21px] font-semibold max-md:text-[17px]">SmartBin</div>

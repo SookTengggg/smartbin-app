@@ -7,7 +7,7 @@ import { trendSeries } from '../lib/chartData'
 import { Empty, ErrorBox, PendingNote, Spinner } from '../components/ui'
 import { REASONS, daysInRange, kg, mergeReasons, previousLabel } from '../lib/format'
 import ReportModal from '../reports/ReportModal'
-import { ESG_CONFIG } from '../lib/esgConfig'
+import { ESG_CONFIG, SHOW_ESG_REPORT } from '../lib/esgConfig'
 
 function Kpi({ label, value, unit, prefix, change, prevLabel, note }) {
   // Less waste than before is good (green); more is bad (red).
@@ -123,33 +123,41 @@ export default function Dashboard({ filter, setFilter, names }) {
                   ))}
                 </select>
               </label>
-              <label className="label">
-                ESG report period
-                <select className="field w-64" value={esgPeriod} onChange={(e) => setEsgPeriod(e.target.value)}>
-                  <option value="fy">Financial year to date</option>
-                  <option value="range">Date range at the top of this page</option>
-                </select>
-              </label>
-              <label className="flex h-[38px] cursor-pointer items-center gap-2 rounded-lg border border-ctl bg-white px-3 text-[14px] hover:border-accent">
-                <input type="checkbox" className="h-4 w-4 accent-[#047857]" checked={showBursa} onChange={(e) => setShowBursa(e.target.checked)} />
-                Include Bursa Malaysia codes
-                <span className="hint">(listed companies)</span>
-              </label>
+              {/* ESG report options: hidden while SHOW_ESG_REPORT is false (lib/esgConfig.js) */}
+              {SHOW_ESG_REPORT && (
+                <>
+                  <label className="label">
+                    ESG report period
+                    <select className="field w-64" value={esgPeriod} onChange={(e) => setEsgPeriod(e.target.value)}>
+                      <option value="fy">Financial year to date</option>
+                      <option value="range">Date range at the top of this page</option>
+                    </select>
+                  </label>
+                  <label className="flex h-[38px] cursor-pointer items-center gap-2 rounded-lg border border-ctl bg-white px-3 text-[14px] hover:border-accent">
+                    <input type="checkbox" className="h-4 w-4 accent-[#047857]" checked={showBursa} onChange={(e) => setShowBursa(e.target.checked)} />
+                    Include Bursa Malaysia codes
+                    <span className="hint">(listed companies)</span>
+                  </label>
+                </>
+              )}
               <p className="hint max-w-md pb-2">
-                Both reports use this waste reason. The cost report uses the date range at the top. The ESG report uses the financial year unless you
-                choose the date range.
+                {SHOW_ESG_REPORT
+                  ? 'Both reports use this waste reason. The cost report uses the date range at the top. The ESG report uses the financial year unless you choose the date range.'
+                  : 'The report uses this waste reason and the date range chosen at the top of this page.'}
               </p>
             </div>
-            <div className="grid grid-cols-2 gap-4 max-lg:grid-cols-1">
-              <ReportCard
-                title="ESG report"
-                text="Scope 3 Category 5 emissions, food waste metrics with the previous period, methodology and disclosure index."
-                onOpen={() => setReport('esg')}
-                button="Preview ESG report"
-              />
+            <div className={SHOW_ESG_REPORT ? 'grid grid-cols-2 gap-4 max-lg:grid-cols-1' : 'max-w-2xl'}>
+              {SHOW_ESG_REPORT && (
+                <ReportCard
+                  title="ESG report"
+                  text="Scope 3 Category 5 emissions, food waste metrics with the previous period, methodology and disclosure index."
+                  onOpen={() => setReport('esg')}
+                  button="Preview ESG report"
+                />
+              )}
               <ReportCard
                 title="Cost analysis report"
-                text="Summary figures, charts, and cost tables by food, reason and day."
+                text="Summary figures, charts, and cost tables by food, reason and day, plus the measured food waste and estimated emissions you can use for ESG reporting."
                 onOpen={() => setReport('cost')}
                 button="Preview cost analysis report"
               />
