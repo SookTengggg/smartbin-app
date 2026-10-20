@@ -1,3 +1,4 @@
+import base64
 import uuid
 from datetime import datetime, timezone
 from fastapi import APIRouter, UploadFile, File, Form, HTTPException
@@ -15,7 +16,7 @@ async def record_disposal(
 ):
     """
     Endpoint B.1: Record Waste Disposal (Waste Receiver Page)
-    Uploads photo -> Runs AI -> Applies Live Supabase Pricing -> Saves to Supabase.
+    Uploads photo -> Runs AI -> Uploads Real Heatmap -> Applies Live Pricing -> Saves to Supabase.
     """
     try:
         # Generate unique transaction ID
@@ -24,26 +25,39 @@ async def record_disposal(
         # Read uploaded image bytes
         image_bytes = await file.read()
 
-        # Upload photo to Supabase Storage (raises 400 if fails)
+        # 1. Upload raw snapshot photo to Supabase Storage
         snapshot_url = upload_file_to_storage(
             file_bytes=image_bytes,
             original_filename=file.filename,
             bucket_name="disposal-snapshots"
         )
 
-        # Run AI inference
+        # 2. Run Real AI inference on Render
         ai_result = run_ai_inference(
             event_id=event_id,
             image_filename=file.filename,
-            total_scale_weight_grams=weight_grams
+            total_scale_weight_grams=weight_grams,
+            image_bytes=image_bytes 
         )
 
-        # Upload heatmap image to xai-heatmaps bucket
-        heatmap_url = upload_file_to_storage(
-            file_bytes=image_bytes,
-            original_filename=f"heatmap_{file.filename}",
-            bucket_name="xai-heatmaps"
-        )
+        # 3. Extract and decode the real Base64 Heatmap from AI response
+        ai_logs = ai_result.get("explainable_ai_logs", {})
+        heatmap_b64 = ai_logs.get("heatmap_base64", "")
+
+        if heatmap_b64:
+            if "," in heatmap_b64:
+                heatmap_b64 = heatmap_b64.split(",")[1]
+            heatmap_bytes = base64.b64decode(heatmap_b64)
+            
+            # Upload real Grad-CAM heatmap to xai-heatmaps bucket
+            heatmap_url = upload_file_to_storage(
+                file_bytes=heatmap_bytes,
+                original_filename=f"{event_id}_gradcam.jpg",
+                bucket_name="xai-heatmaps"
+            )
+        else:
+            # Fallback if base64 is missing
+            heatmap_url = ai_logs.get("heatmap_image_url", snapshot_url)
 
         # Calculate carbon footprint (locked 0.7 factor)
         weight_kg = round(weight_grams / 1000.0, 3)
@@ -68,7 +82,6 @@ async def record_disposal(
         for cat, data in raw_breakdown.items():
             w_g = float(data.get("calculated_weight_grams", 0.0))
             if w_g > 0:
-                # Use live rate from DB, fallback to AI benchmark rate if missing
                 rate = live_price_map.get(cat, float(data.get("financial_cost_loss_myr", 0.0)) / (w_g / 100.0) if w_g > 0 else 1.0)
                 cat_cost = round((w_g / 100.0) * rate, 2)
                 total_live_cost += cat_cost
