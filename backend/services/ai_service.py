@@ -20,7 +20,7 @@ def run_ai_inference(event_id: str, image_filename: str, total_scale_weight_gram
         }
 
         # Send HTTP POST request to  live cloud AI service (with a 90s timeout for ML latency)
-        response = requests.post(AI_SERVER_URL, files=files, data=data, timeout=90)
+        response = requests.post(AI_SERVER_URL, files=files, data=data, timeout=180)
 
         if response.status_code == 200:
             return response.json() # Returns real YOLOv11 cloud JSON output!
