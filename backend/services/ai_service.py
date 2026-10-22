@@ -2,7 +2,8 @@ import os
 import requests
 from fastapi import HTTPException
 
-AI_SERVER_URL = os.getenv("AI_SERVER_URL", "https://smartbin-ai-ikxi.onrender.com/ai/infer")
+#AI_SERVER_URL = os.getenv("AI_SERVER_URL", "https://smartbin-ai-ikxi.onrender.com/ai/infer")
+AI_SERVER_URL = os.getenv("AI_SERVER_URL", "https://smartbin-ai-838568361371.asia-southeast1.run.app/ai/infer")
 
 def run_ai_inference(event_id: str, image_filename: str, total_scale_weight_grams: float, image_bytes: bytes = None):
     """
@@ -20,6 +21,7 @@ def run_ai_inference(event_id: str, image_filename: str, total_scale_weight_gram
         }
 
         # Send HTTP POST request to  live cloud AI service (with a 90s timeout for ML latency)
+        print(f"🚀 Calling AI Server at: {AI_SERVER_URL}")
         response = requests.post(AI_SERVER_URL, files=files, data=data, timeout=180)
 
         if response.status_code == 200:
