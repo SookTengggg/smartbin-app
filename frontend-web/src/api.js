@@ -1,7 +1,7 @@
 // Every call to the SmartBin backend goes through this file.
 // Set VITE_API_BASE_URL in .env.local to use a local backend (see .env.example).
 
-export const API_BASE = (import.meta.env.VITE_API_BASE_URL || 'https://smartbin-backend-xa6u.onrender.com').replace(/\/$/, '')
+export const API_BASE = (import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000').replace(/\/$/, '')
 
 // The free Render server sleeps after 15 minutes idle and takes up to a minute to wake.
 // Components can subscribe to know when a request is slow, to show a "waking up" notice.
