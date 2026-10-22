@@ -2,8 +2,7 @@ import os
 import requests
 from fastapi import HTTPException
 
-#AI_SERVER_URL = os.getenv("AI_SERVER_URL", "https://smartbin-ai-ikxi.onrender.com/ai/infer")
-AI_SERVER_URL = os.getenv("AI_SERVER_URL", "https://smartbin-ai-838568361371.asia-southeast1.run.app/ai/infer")
+AI_SERVER_URL = os.getenv("AI_SERVER_URL", "http://localhost:8001/ai/infer")
 
 def run_ai_inference(event_id: str, image_filename: str, total_scale_weight_grams: float, image_bytes: bytes = None):
     """
